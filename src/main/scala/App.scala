@@ -4,13 +4,20 @@ import scalaz._
 import Scalaz._
 
 trait FillMinimal {
-  def fillMinimal {}
+  self : ExpertPage =>
+  def fillMinimal : self.type = this
 }
 
-trait ExpertPage
+trait ExpertPage extends FillMinimal
+
 
 //TODO: skipper
 //TODO: different final pages
+
+object Ops {
+  def skip[A <: ExpertPage, B <: ExpertPage](a : A)(implicit ev : A => WizardStep[_, A, B]) : B =
+    a.fillMinimal.next
+}
 
 //pages predefined
 class Page1 extends ExpertPage
@@ -22,7 +29,7 @@ object Page1 {
     new Page1 with Construct[Page1] {
       def get = new Page1
     }
-  
+
   //pages to steps
   //we can use macros to autogenerate it
   implicit def page1ToStep(x : Page1): WizardStep[Page1, Page1, Page2] =
@@ -39,8 +46,8 @@ object Page2 {
     new Page2 with Construct[Page2] {
       def get = new Page2
     }
-  
-  
+
+
   implicit def page2ToStep(x : Page2): WizardStep[Page1, Page2, CPage[Page3]] =
     new Page2 with WizardStep[Page1, Page2, CPage[Page3]] {
       def next = implicitly[Construct[CPage[Page3]]].get
@@ -55,7 +62,7 @@ object Page3 {
     new Page3 with Construct[Page3] {
       def get = new Page3
     }
-  
+
   implicit def page3ToStep(x : Page3): WizardStep[Page2, Page3, Page3] =
     new Page3 with WizardStep[Page2, Page3, Page3] {
       def next = this
@@ -70,12 +77,12 @@ class CPage[Next <: ExpertPage] extends ExpertPage {
 
 object CPage {
   def apply() = new CPage[Page3]
-  
+
   implicit def cPageToConstruct[A <: ExpertPage]: Construct[CPage[A]] =
     new CPage with Construct[CPage[A]] {
       def get = new CPage[A]
     }
-  
+
   implicit def CPageToStep[Next <: ExpertPage : Construct](x : CPage[Next]) : WizardStep[Page3, CPage[Next], Next] =
     new CPage[Next] with WizardStep[Page3, CPage[Next], Next] {
       def next = implicitly[Construct[Next]].get
@@ -101,32 +108,32 @@ trait WizardStepOps[Prev <: ExpertPage, Current <: ExpertPage, Next <: ExpertPag
   def proceed : Next = next
 }
 
-object MonadicTester {  
+object MonadicTester {
   //try to devise underlying type with following props:
   // - knows who is current, next and prev (if available)
   // - makes all of them implicitly available
   // - knows if page is present
 
   def startWith = state[Option[Page1], Page1](new Page1)
-  def goFurther[Prev <: ExpertPage, Current <: ExpertPage <% WizardStep[Prev, Current, Next], Next <: ExpertPage] = 
+  def goFurther[Prev <: ExpertPage, Current <: ExpertPage <% WizardStep[Prev, Current, Next], Next <: ExpertPage] =
     State[Option[Current], Next] { case old@Some(x) =>
       val next = x.proceed
       (old, next)
     }
-  
+
   for {
     x <- startWith
     _ <- goFurther[Page1, Page1, Page2] //how to drop explicit arguments?
   } yield(x)
 }
 
-object MonadicTester2 {  
+object MonadicTester2 {
   trait Underlying {
     type Current <: ExpertPage
   }
   case class InWizard[Prev <: ExpertPage, Next <: ExpertPage](curr : Underlying#Current)
-  					(implicit ev : Underlying#Current => 
-  					   WizardStep[Prev, Underlying#Current, Next]) 
+  					(implicit ev : Underlying#Current =>
+  					   WizardStep[Prev, Underlying#Current, Next])
   	   extends Underlying {
     type P = Prev
     type N = Next
@@ -137,13 +144,13 @@ object MonadicTester2 {
   }
 
   def startWith = state[Underlying, Page1](new Page1)
-  def goFurther[A <: ExpertPage, B <: ExpertPage] = 
+  def goFurther[A <: ExpertPage, B <: ExpertPage] =
     State[Underlying, InWizard[A, B]#N] { case old@InWizard(x) =>
       val next = old.asWizard.proceed
       (old, next.asInstanceOf[B])
     }
-  
-  val fin = 
+
+  val fin =
     for {
       x <- startWith
       _ <- goFurther[Page1, Page2] //how to drop explicit arguments?
