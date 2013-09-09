@@ -21,9 +21,9 @@ trait Construct[A] {
 }
 
 //for higher-kinded context bounds
-object HKHelper {
-  type HKConstruct[A[_]] = Construct[A[_]]
-}
+// object HKHelper {
+//   type HKConstruct[A[_]] = Construct[A[_]]
+// }
 
 trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] {
   def next : Next
@@ -118,6 +118,11 @@ object Page3 {
     new Page3 with WizardPrevStep[Page3[A], Page2[A]] {
       def prev = implicitly[Construct[Page2[A]]].get
     }
+
+  implicit def page3ToNextStep[A <: ExpertPage : Construct](x : Page3[A]): WizardNextStep[Page3[A], A] =
+    new Page3 with WizardNextStep[Page3[A], A] {
+      def next = implicitly[Construct[A]].get
+    }
 }
 
 //this page can have several next pages
@@ -158,7 +163,26 @@ object CPage {
 
 class FaPage extends ExpertPage
 
+object FaPage {
+  implicit def faPageToConstruct: Construct[FaPage] =
+    new FaPage with Construct[FaPage] {
+      def get = new FaPage
+  }
+
+  implicit def faPageToPrevStep(x : FaPage): WizardPrevStep[FaPage, Page3[FaPage]] =
+    new FaPage with WizardPrevStep[FaPage, Page3[FaPage]] {
+      def prev = implicitly[Construct[Page3[FaPage]]].get
+    }
+}
+
 class CreditPage extends ExpertPage
+
+object CreditPage {
+  implicit def creditPageToConstruct: Construct[CreditPage] =
+    new CreditPage with Construct[CreditPage] {
+      def get = new CreditPage
+  }
+}
 
 trait StateWrapper[T <: ExpertPage] {
   val x : T
@@ -311,23 +335,14 @@ object SSSTate {
 
 object App {
   def main(args: Array[String]) {
-    // scala> CPage().proceed
-    // res1: kontur.scalatestrefactor.Page3 = kontur.scalatestrefactor.Page3@187293dd
-
-    // scala> implicitly[Construct[CPage[Page3]]].get
-    // res3: kontur.scalatestrefactor.CPage[kontur.scalatestrefactor.Page3] = kontur.sc
-    // alatestrefactor.CPage@515441f
-
-    // scala> res0.proceed.proceed.check2010.proceed.prev
-    // res5: kontur.scalatestrefactor.Page1 = kontur.scalatestrefactor.Page1@71471ecf
-
-
 //     scala> (new Page1[FaPage]).next.next.next.prev.prev
 // res0: kontur.scalatestrefactor.Page1[kontur.scalatestrefactor.FaPage] = kontur.scalatestrefactor.Page1@38e00a5e
 
 // scala> (new Page1[FaPage]).next.next.check2010.next.prev
 // res5: kontur.scalatestrefactor.Page1[kontur.scalatestrefactor.FaPage] = kontur.scalatestrefactor.Page1@5e7175af
 
+// (new Page1[FaPage]).next.next.check2010.next.next.next.next.prev.prev.prev.next.next
+// res4: kontur.scalatestrefactor.CPage[kontur.scalatestrefactor.Page3[kontur.scalatestrefactor.FaPage],kontur.scalatestrefactor.FaPage] = kontur.scalatestrefactor.CPage@679e96f7
 
 
     print("Hello kontur.scalaTestRefactor!")
