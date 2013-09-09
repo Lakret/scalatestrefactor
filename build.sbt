@@ -13,7 +13,8 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq("-deprecation", "-feature",
                       "-language:implicitConversions", "-language:reflectiveCalls",
-  	                  "-language:existentials", "-language:postfixOps")
+  	                  "-language:postfixOps",
+                      "-language:higherKinds")
 
 EclipseKeys.withSource := true
 

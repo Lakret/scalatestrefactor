@@ -13,11 +13,48 @@ trait FillMinimal {
 //thus, we need a constructable to be able to pass a state
 //and state by itself should be constructable
 
-trait ContainsState[State] {
+trait ExpertPage extends FillMinimal
 
+//generic traits
+trait Construct[A] {
+  def get : A
 }
 
-trait ExpertPage extends FillMinimal
+//for higher-kinded context bounds
+object HKHelper {
+  type HKConstruct[A[_]] = Construct[A[_]]
+}
+
+trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] {
+  def next : Next
+}
+
+trait WizardPrevStep[Current <: ExpertPage, Prev <: ExpertPage] {
+  def prev : Prev
+}
+
+class Connector[T : Manifest] {
+  implicit val ev = implicitly[Manifest[T]]
+  type Tp = T
+
+  def getImplicitConstructorIfAvailable[T](implicit constructable : Construct[T] = null) =
+    if (constructable != null) Some(constructable) else None
+
+  def construction : Unit=>T = (Unit : Unit) => {
+    println("not overriden")
+    getImplicitConstructorIfAvailable[Tp] match {
+      case Some(constructable) => {
+        println("invoking constructable")
+        val r = constructable.get
+        println("got after construct: " + r.toString())
+        r
+      }
+      case None =>
+        throw new RuntimeException("Cannot locate implicit constructable, " +
+            "you must either make implicit available or override Connector.construction")
+    }
+  }
+}
 
 
 //TODO: skipper
@@ -29,94 +66,99 @@ object Ops {
 }
 
 //pages predefined
-class Page1 extends ExpertPage
+class Page1[Type <: ExpertPage] extends ExpertPage
 
 object Page1 {
   //pages to construct
   //we can use reflection or macros to autogenerate it
-  implicit val page1ToConstruct: Construct[Page1] =
-    new Page1 with Construct[Page1] {
-      def get = new Page1
+  implicit def page1ToConstruct[A <: ExpertPage]: Construct[Page1[A]] =
+    new Page1 with Construct[Page1[A]] {
+      def get = new Page1[A]
     }
 
   //pages to steps
   //we can use macros to autogenerate it
-  implicit def page1ToNextStep(x : Page1): WizardNextStep[Page1, Page2] =
-    new Page1 with WizardNextStep[Page1, Page2] {
-      def next = implicitly[Construct[Page2]].get
+  implicit def page1ToNextStep[A <: ExpertPage](x : Page1[A]): WizardNextStep[Page1[A], Page2[A]] =
+    new Page1 with WizardNextStep[Page1[A], Page2[A]] {
+      def next = implicitly[Construct[Page2[A]]].get
     }
 }
 
-class Page2 extends ExpertPage
+class Page2[Type <: ExpertPage] extends ExpertPage
 
 object Page2 {
-  implicit val page2ToConstruct: Construct[Page2] =
-    new Page2 with Construct[Page2] {
-      def get = new Page2
+  implicit def page2ToConstruct[A <: ExpertPage]: Construct[Page2[A]] =
+    new Page2 with Construct[Page2[A]] {
+      def get = new Page2[A]
     }
 
 
-  implicit def page2ToNextStep(x : Page2): WizardNextStep[Page2, CPage[Page3]] =
-    new Page2 with WizardNextStep[Page2, CPage[Page3]] {
-      def next = implicitly[Construct[CPage[Page3]]].get
+  implicit def page2ToNextStep[A <: ExpertPage](x : Page2[A]): WizardNextStep[Page2[A], CPage[Page3[A], A]] =
+    new Page2 with WizardNextStep[Page2[A], CPage[Page3[A], A]] {
+      //TODO: fix it
+      //def next = implicitly[Construct[CPage[Page3[A], A]]].get
+      def next = CPage[A]()
     }
 
-  implicit def page2ToPrevStep(x : Page2): WizardPrevStep[Page2, Page1] =
-    new Page2 with WizardPrevStep[Page2, Page1] {
-      def prev = implicitly[Construct[Page1]].get
+  implicit def page2ToPrevStep[A <: ExpertPage](x : Page2[A]): WizardPrevStep[Page2[A], Page1[A]] =
+    new Page2 with WizardPrevStep[Page2[A], Page1[A]] {
+      def prev = implicitly[Construct[Page1[A]]].get
     }
 }
 
-class Page3 extends ExpertPage
+class Page3[Type <: ExpertPage] extends ExpertPage
 
 object Page3 {
-  implicit val page3ToConstruct: Construct[Page3] =
-    new Page3 with Construct[Page3] {
-      def get = new Page3
+  implicit def page3ToConstruct[A <: ExpertPage]: Construct[Page3[A]] =
+    new Page3 with Construct[Page3[A]] {
+      def get = new Page3[A]
     }
 
-  implicit def page3ToPrevStep(x : Page3): WizardPrevStep[Page3, Page2] =
-    new Page3 with WizardPrevStep[Page3, Page2] {
-      def prev = implicitly[Construct[Page2]].get
+  implicit def page3ToPrevStep[A <: ExpertPage](x : Page3[A]): WizardPrevStep[Page3[A], Page2[A]] =
+    new Page3 with WizardPrevStep[Page3[A], Page2[A]] {
+      def prev = implicitly[Construct[Page2[A]]].get
     }
 }
 
 //this page can have several next pages
-class CPage[Next <: ExpertPage] extends ExpertPage {
-  def check2010 = new CPage[Page2]
+class CPage[Next <: ExpertPage, Type <: ExpertPage] extends ExpertPage {
+  def check2010 = new CPage[Page2[Type], Type]
 }
 
 object CPage {
-  def apply() = new CPage[Page3]
+  def apply[A <: ExpertPage]() = new CPage[Page3[A], A]
 
-  implicit def cPageToConstruct[A <: ExpertPage]: Construct[CPage[A]] =
-    new CPage with Construct[CPage[A]] {
-      def get = new CPage[A]
+  implicit def cPageToConstruct[B <: ExpertPage, A[B] <: ExpertPage]: Construct[CPage[A[B], B]] =
+    new CPage with Construct[CPage[A[B], B]] {
+      def get = new CPage[A[B], B]
     }
 
-  implicit def CPageToNextStep[Next <: ExpertPage : Construct](x : CPage[Next]) : WizardNextStep[CPage[Next], Next] =
-    new CPage[Next] with WizardNextStep[CPage[Next], Next] {
-      def next = implicitly[Construct[Next]].get
+  // implicit def CPageToNextStep[A <: ExpertPage, Next[_] <: ExpertPage : ({type λ[X[A]] = Construct[X[A]]})#λ](x : CPage[Next[A], A])
+  //   : WizardNextStep[CPage[Next[A], A], Next[A]] =
+  //   new CPage[Next[A], A] with WizardNextStep[CPage[Next[A], A], Next[A]] {
+  //     def next = implicitly[Construct[Next[A]]].get
+  //   }
+
+  //IMPORTANT: MUST PROVIDE BOUND ON _ IN NEXT[_]
+  //Also, we cannot use context bounds here: see http://yz.mit.edu/wp/true-scala-complexity/ (
+  //"we have to take the converter in as an “explicit” implicit parameter in a curried argument
+  //list such that the type inference can flow from the first argument list to the type parameter list to the second argument list")
+  implicit def CPageToNextStep[A <: ExpertPage, Next[_ <: ExpertPage] <: ExpertPage](x : CPage[Next[A], A])(implicit ev : Construct[Next[A]])
+    : WizardNextStep[CPage[Next[A], A], Next[A]] =
+    new CPage[Next[A], A] with WizardNextStep[CPage[Next[A], A], Next[A]] {
+      def next = ev.get
     }
 
-  implicit def CPageToPrevStep[Next <: ExpertPage : Construct](x : CPage[Next]) : WizardPrevStep[CPage[Next], Page3] =
-    new CPage[Next] with WizardPrevStep[CPage[Next], Page3] {
-      def prev = new Page3
+  implicit def CPageToPrevStep[A <: ExpertPage, Next[_ <: ExpertPage] <: ExpertPage](x : CPage[Next[A], A]) //(implicit ev : Construct[Next[A]])
+    : WizardPrevStep[CPage[Next[A], A], Page3[A]] =
+    new CPage[Next[A], A] with WizardPrevStep[CPage[Next[A], A], Page3[A]] {
+      def prev = new Page3[A]
     }
 }
 
-//generic traits
-trait Construct[A] {
-  def get : A
-}
+class FaPage extends ExpertPage
 
-trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] {
-  def next : Next
-}
-
-trait WizardPrevStep[Current <: ExpertPage, Prev <: ExpertPage] {
-  def prev : Prev
-}
+class CreditPage extends ExpertPage
 
 trait StateWrapper[T <: ExpertPage] {
   val x : T
@@ -278,6 +320,14 @@ object App {
 
     // scala> res0.proceed.proceed.check2010.proceed.prev
     // res5: kontur.scalatestrefactor.Page1 = kontur.scalatestrefactor.Page1@71471ecf
+
+
+//     scala> (new Page1[FaPage]).next.next.next.prev.prev
+// res0: kontur.scalatestrefactor.Page1[kontur.scalatestrefactor.FaPage] = kontur.scalatestrefactor.Page1@38e00a5e
+
+// scala> (new Page1[FaPage]).next.next.check2010.next.prev
+// res5: kontur.scalatestrefactor.Page1[kontur.scalatestrefactor.FaPage] = kontur.scalatestrefactor.Page1@5e7175af
+
 
 
     print("Hello kontur.scalaTestRefactor!")
