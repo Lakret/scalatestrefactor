@@ -25,9 +25,30 @@ trait Construct[A] {
 //   type HKConstruct[A[_]] = Construct[A[_]]
 // }
 
-trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] {
+trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] extends WizardNextStepOps[Current, Next]{
+  self : ExpertPage =>
   def next : Next
 }
+
+// object WizardNextStepOps {
+// //   implicit def toWizardNextStepOps[Result <: ExpertPage, Next <: ExpertPage, A[_ <: ExpertPage] <: ExpertPage](x : A[Result])
+// //               (implicit ev : A[Result] => WizardNextStep[A[Result], Next]) : WizardNextStepOps[A[Result], Next] =
+// //     new WizardNextStepOps[A[Result], Next] {
+// //       def skip = x.fillMinimal.next
+// //     }
+//   // implicit def toWizardNextStepOps[Result <: ExpertPage, Next <: ExpertPage, A[_ <: ExpertPage] <% WizardNextStep[A[_ <: ExpertPage], Next]](x : A[Result])
+//   //             : WizardNextStepOps[A[Result], Next] =
+//   //   new WizardNextStepOps[A[Result], Next] {
+//   //     def skip = x.fillMinimal.next
+//   //   }
+// }
+
+trait WizardNextStepOps[Current <: ExpertPage, Next <: ExpertPage] {
+  self : WizardNextStep[Current, Next] with ExpertPage =>
+  def skip : Next = self.fillMinimal.next
+}
+
+
 
 trait WizardPrevStep[Current <: ExpertPage, Prev <: ExpertPage] {
   def prev : Prev
@@ -58,7 +79,6 @@ class Connector[T : Manifest] {
 
 
 //TODO: skipper
-//TODO: different final pages
 
 object Ops {
   def skip[A <: ExpertPage, B <: ExpertPage](a : A)(implicit ev : A => WizardNextStep[A, B]) : B =
@@ -95,9 +115,7 @@ object Page2 {
 
   implicit def page2ToNextStep[A <: ExpertPage](x : Page2[A]): WizardNextStep[Page2[A], CPage[Page3[A], A]] =
     new Page2 with WizardNextStep[Page2[A], CPage[Page3[A], A]] {
-      //TODO: fix it
-      //def next = implicitly[Construct[CPage[Page3[A], A]]].get
-      def next = CPage[A]()
+      def next = implicitly[Construct[CPage[Page3[A], A]]].get
     }
 
   implicit def page2ToPrevStep[A <: ExpertPage](x : Page2[A]): WizardPrevStep[Page2[A], Page1[A]] =
@@ -133,7 +151,7 @@ class CPage[Next <: ExpertPage, Type <: ExpertPage] extends ExpertPage {
 object CPage {
   def apply[A <: ExpertPage]() = new CPage[Page3[A], A]
 
-  implicit def cPageToConstruct[B <: ExpertPage, A[B] <: ExpertPage]: Construct[CPage[A[B], B]] =
+  implicit def cPageToConstruct[B <: ExpertPage, A[B <: ExpertPage] <: ExpertPage]: Construct[CPage[A[B], B]] =
     new CPage with Construct[CPage[A[B], B]] {
       def get = new CPage[A[B], B]
     }
