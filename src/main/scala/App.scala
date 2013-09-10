@@ -25,7 +25,7 @@ trait Construct[A] {
 //   type HKConstruct[A[_]] = Construct[A[_]]
 // }
 
-trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] extends WizardNextStepOps[Current, Next]{
+trait WizardNextStep[+Current <: ExpertPage, +Next <: ExpertPage] extends WizardNextStepOps[Current, Next]{
   self : ExpertPage =>
   def next : Next
 }
@@ -43,7 +43,7 @@ trait WizardNextStep[Current <: ExpertPage, Next <: ExpertPage] extends WizardNe
 //   //   }
 // }
 
-trait WizardNextStepOps[Current <: ExpertPage, Next <: ExpertPage] {
+trait WizardNextStepOps[+Current <: ExpertPage, +Next <: ExpertPage] {
   self : WizardNextStep[Current, Next] with ExpertPage =>
   def skip : Next = self.fillMinimal.next
 }
@@ -78,12 +78,10 @@ class Connector[T : Manifest] {
 }
 
 
-//TODO: skipper
-
-object Ops {
-  def skip[A <: ExpertPage, B <: ExpertPage](a : A)(implicit ev : A => WizardNextStep[A, B]) : B =
-    a.fillMinimal.next
-}
+// object Ops {
+//   def skip[A <: ExpertPage, B <: ExpertPage](a : A)(implicit ev : A => WizardNextStep[A, B]) : B =
+//     a.fillMinimal.next
+// }
 
 //pages predefined
 class Page1[Type <: ExpertPage] extends ExpertPage
@@ -117,6 +115,10 @@ object Page2 {
     new Page2 with WizardNextStep[Page2[A], CPage[Page3[A], A]] {
       def next = implicitly[Construct[CPage[Page3[A], A]]].get
     }
+  // implicit def page2ToNextStep[A <: ExpertPage](x : Page2[A]): WizardNextStep[Page2[A], CPage2[A]] =
+  //   new Page2 with WizardNextStep[Page2[A], CPage2[A]] {
+  //     def next = implicitly[Construct[CPage2[A]]].get
+  //   }
 
   implicit def page2ToPrevStep[A <: ExpertPage](x : Page2[A]): WizardPrevStep[Page2[A], Page1[A]] =
     new Page2 with WizardPrevStep[Page2[A], Page1[A]] {
@@ -124,12 +126,14 @@ object Page2 {
     }
 }
 
-class Page3[Type <: ExpertPage] extends ExpertPage
+sealed trait YearDependentStep extends ExpertPage
+
+case class Page3[Type <: ExpertPage]() extends YearDependentStep
 
 object Page3 {
   implicit def page3ToConstruct[A <: ExpertPage]: Construct[Page3[A]] =
     new Page3 with Construct[Page3[A]] {
-      def get = new Page3[A]
+      def get = Page3[A]()
     }
 
   implicit def page3ToPrevStep[A <: ExpertPage](x : Page3[A]): WizardPrevStep[Page3[A], Page2[A]] =
@@ -178,6 +182,36 @@ object CPage {
       def prev = new Page3[A]
     }
 }
+
+case class Page4[Type <: ExpertPage]() extends YearDependentStep
+
+class CPage2[Type <: ExpertPage](val year : Int = 2012) extends ExpertPage {
+  def changeYearTo2010 = new CPage2[Type](2010)
+}
+
+object CPage2 {
+  implicit def cpage2ToConstruct[A <: ExpertPage] : Construct[CPage2[A]] =
+    new Construct[CPage2[A]] {
+      def get = new CPage2[A]
+    }
+
+  implicit def cpage2ToNextStep[A <: ExpertPage](x : CPage2[A]) : WizardNextStep[CPage2[A], YearDependentStep] =
+    if (x.year == 2010) {
+      new CPage2 with WizardNextStep[CPage2[A], Page3[A]] {
+        def next = implicitly[Construct[Page3[A]]].get
+      }
+    } else {
+      new CPage2 with WizardNextStep[CPage2[A], Page4[A]] {
+        def next = Page4[A]()
+      }
+    }
+
+  implicit def cpage2ToPrevStep[A <: ExpertPage](x : CPage2[A]) : WizardPrevStep[CPage2[A], Page2[A]] =
+    new CPage2[A] with WizardPrevStep[CPage2[A], Page2[A]] {
+      def prev = implicitly[Construct[Page2[A]]].get
+    }
+}
+
 
 class FaPage extends ExpertPage
 
